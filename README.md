@@ -153,6 +153,10 @@ Required groups:
 - Add tests (Jest + Supertest)
 - Add CI for lint and tests
 
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
 ## Author
 
 Harsh Upadhyay

@@ -1,243 +1,157 @@
 # Learning Management System (LMS) Backend
 
-A production-oriented Node.js backend for a Learning Management System with role-based access, course authoring, lecture delivery, progress tracking, and payment integration.
+A robust Node.js + Express backend for a Learning Management System with role-based access, media uploads, progress tracking, and online payments.
 
-## Project Overview
+## Why this project
 
-This repository contains the backend API for an LMS platform where:
-- Students can sign up, sign in, manage profile, and track learning progress.
-- Instructors can create courses and upload lectures.
-- Users can purchase courses via Stripe or Razorpay.
-- The system enforces secure defaults through middleware for rate limiting, sanitization, and auth.
+This backend is built to support real LMS workflows:
+- Authentication and profile management for students and instructors
+- Course creation and lecture management
+- Course progress tracking at lecture level
+- Stripe and Razorpay payment integration
+- Security-first middleware configuration
 
-## Tech Stack
+## Tech stack
 
-- Runtime: Node.js
-- Framework: Express (ES Modules)
-- Database: MongoDB with Mongoose
-- Auth: JWT (HTTP-only cookie)
-- File Uploads: Multer
-- Media Storage: Cloudinary
-- Payments: Stripe and Razorpay
-- Security: Helmet, CORS, HPP, express-mongo-sanitize, express-rate-limit
-- Logging: Morgan
+- Node.js
+- Express (ES Modules)
+- MongoDB + Mongoose
+- JWT (HTTP-only cookie auth)
+- Multer + Cloudinary
+- Stripe + Razorpay
+- Helmet, CORS, HPP, Rate Limiting, Mongo Sanitize
 
-## Current Folder Structure
+## Project structure
 
 ```text
 LMS/
-├── controllers/                # Request handlers (business logic)
-│   ├── course.controller.js
-│   ├── courseProgress.controller.js
-│   ├── coursePurchase.controller.js
-│   ├── health.controller.js
-│   ├── razorpay.controller.js
-│   └── user.controller.js
+├── controllers/
 ├── database/
-│   └── db.js                   # MongoDB connection manager with retry logic
 ├── middleware/
-│   ├── auth.middleware.js      # Auth + RBAC helpers
-│   ├── error.middleware.js     # AppError, catchAsync, global error helpers
-│   └── validation.middleware.js# express-validator based input validation
-├── models/                     # Mongoose schemas
-│   ├── course.model.js
-│   ├── courseProgress.js
-│   ├── coursePurchase.model.js
-│   ├── lecture.model.js
-│   └── user.model.js
+├── models/
 ├── routes/
-│   ├── course.route.js
-│   ├── courseProgress.route.js
-│   ├── health.routes.js
-│   ├── media.route.js
-│   ├── purchaseCourse.route.js
-│   ├── razorpay.routes.js
-│   └── user.route.js
-├── uploads/                    # Temporary local upload storage (multer)
+├── uploads/
 ├── utils/
-│   ├── cloudinary.js
-│   ├── generateToken.js
-│   └── multer.js
-├── index.js                    # App bootstrap
-└── package.json
+├── index.js
+├── package.json
+└── README.md
 ```
 
-## Architecture Summary
+## Folder purpose
 
-### Layered Backend Design
-- Route layer: Defines endpoints and composes middleware.
-- Controller layer: Contains business logic for each feature domain.
-- Model layer: Mongoose schemas with hooks, methods, and indexes.
-- Middleware layer: Auth, validation, and centralized error behavior.
-- Utility layer: Token generation, media upload/delete, multipart handling.
+- controllers: business logic for user, course, progress, and payment modules
+- database: MongoDB connection manager with retry strategy
+- middleware: auth, error handling, and request validation
+- models: Mongoose schemas, hooks, methods, and indexes
+- routes: feature route definitions grouped by domain
+- utils: Cloudinary integration, token generation, and upload config
 
-### Security Pipeline
-- `helmet()` for secure HTTP headers
-- `express-mongo-sanitize()` to block Mongo operator injection
-- `hpp()` to mitigate HTTP Parameter Pollution
-- Rate limit on `/api` namespace (100 req / 15 min / IP)
-- CORS with configurable origin + credentials support
+## Security highlights
+
+- Helmet for secure response headers
+- express-mongo-sanitize for query injection hardening
+- hpp for HTTP parameter pollution protection
+- Global API rate limit under /api
+- CORS allowlist support via env variable
 - JWT stored in HTTP-only cookie
 
-## Data Models (Important)
+## Data model overview
 
 ### User
-Key fields:
-- `name`, `email` (unique, normalized)
-- `password` (hashed via pre-save hook)
-- `role` (`student`, `instructor`, `admin`)
-- `avatar`, `bio`
-- `enrolledCourses[]` (with enrollment date)
-- `createdCourses[]`
-- Password reset token/expiry
-
-Methods/virtuals:
-- `comparePassword()`
-- `getResetPasswordToken()`
-- `updateLastActive()`
-- `totalEnrolledCourses` (virtual)
+- name, email, password, role
+- avatar, bio, enrolledCourses, createdCourses
+- reset token support and lastActive tracking
 
 ### Course
-Key fields:
-- `title`, `subtitle`, `description`, `category`
-- `level` (`beginner`, `intermediate`, `advanced`)
-- `price`, `thumbnail`
-- `instructor` ref
-- `lectures[]`, `enrolledStudents[]`
-- `isPublished`, `totalDuration`, `totalLectures`
-
-Virtuals/hooks:
-- `averageRating` (placeholder)
-- pre-save hook updates `totalLectures`
+- title, subtitle, description, category, level, price
+- thumbnail, instructor, lectures, enrolledStudents, isPublished
 
 ### Lecture
-Key fields:
-- `title`, `description`, `videoUrl`, `publicId`
-- `duration`, `order`, `isPreview`
-
-Hooks:
-- pre-save duration rounding
+- title, description, videoUrl, publicId, duration, order, isPreview
 
 ### CourseProgress
-Tracks per-user progress on a course:
-- `user`, `course`
-- `lectureProgress[]` (`lecture`, `isCompleted`, `watchTime`, `lastWatched`)
-- `completionPercentage`, `isCompleted`, `lastAccessed`
-
-Hook/method:
-- pre-save completion calculation
-- `updateLastAccessed()`
+- per-user per-course lecture progress and completion percentage
 
 ### CoursePurchase
-Tracks payment lifecycle:
-- `course`, `user`, `amount`, `currency`
-- `status` (`pending`, `completed`, `failed`, `refunded`)
-- `paymentMethod`, `paymentId`
-- Refund metadata
+- payment lifecycle status, method, amount, refund metadata
 
-Indexes/virtual:
-- indexes for purchase lookup performance
-- `isRefundable` (30-day window)
+## API status
 
-## API Modules
+### Mounted now
+- GET /health
+- POST /api/v1/users/signup
+- POST /api/v1/users/signin
+- POST /api/v1/users/signout
+- GET /api/v1/users/profile
+- PATCH /api/v1/users/profile
+- PATCH /api/v1/users/change-password
+- DELETE /api/v1/users/account
 
-### Currently Mounted in index.js
-- `GET /health`
-- `POST /api/v1/users/signup`
-- `POST /api/v1/users/signin`
-- `POST /api/v1/users/signout`
-- `GET /api/v1/users/profile`
-- `PATCH /api/v1/users/profile`
-- `PATCH /api/v1/users/change-password`
-- `DELETE /api/v1/users/account`
+### Implemented but not mounted in index.js yet
+- routes/course.route.js
+- routes/courseProgress.route.js
+- routes/purchaseCourse.route.js
+- routes/razorpay.routes.js
 
-### Implemented But Not Yet Mounted in index.js
-These route files are present and implemented:
-- `routes/course.route.js`
-- `routes/courseProgress.route.js`
-- `routes/purchaseCourse.route.js`
-- `routes/razorpay.routes.js`
+## Quick start
 
-To activate these modules, mount them in `index.js` under `/api/v1`.
+1. Install dependencies
 
-## Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-PORT=8000
-NODE_ENV=development
-
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-
-CORS_ORIGIN=http://localhost:5173
-CLIENT_URL=http://localhost:5173
-
-# Cloudinary
-CLOUD_NAME=your_cloud_name
-API_KEY=your_cloudinary_api_key
-API_SECRET=your_cloudinary_api_secret
-
-# Stripe
-STRIPE_SECRET_KEY=your_stripe_secret_key
-STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
-
-# Razorpay
-RAZORPAY_KEY_ID=your_razorpay_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_key_secret
-```
-
-## Local Setup
-
-### 1. Install dependencies
 ```bash
 npm install
 ```
 
-### 2. Add environment variables
-Create `.env` from the template above.
+2. Create env file
 
-### 3. Start development server
+macOS/Linux:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+3. Run in development
+
 ```bash
 npm run dev
 ```
 
-### 4. Production start
+4. Run in production mode
+
 ```bash
 npm start
 ```
 
-## Recommended Bootstrap Enhancements
+## Environment variables
 
-For a stronger production-ready setup, ensure the following in `index.js`:
-- Initialize DB connection from `database/db.js` during app startup.
-- Mount all implemented feature routes (`courses`, `progress`, `payments`, `razorpay`).
-- Use shared global error middleware from `middleware/error.middleware.js` for consistent error shape.
+Use .env.example as reference.
 
-## Example End-to-End User Flow
+Required groups:
+- App: PORT, NODE_ENV, CORS_ORIGIN, CLIENT_URL
+- Database: MONGO_URI
+- Auth: JWT_SECRET
+- Cloudinary: CLOUD_NAME, API_KEY, API_SECRET
+- Stripe: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+- Razorpay: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 
-1. User signs up or signs in.
-2. Instructor creates a course and uploads lectures.
-3. Student browses/searches published courses.
-4. Student purchases a course (Stripe or Razorpay).
-5. Student watches lectures and progress is tracked per lecture.
+## GitHub upload checklist
 
-## Project Strengths
+- Keep secrets only in .env (never commit real keys)
+- Keep generated uploads out of git
+- Ensure README is up to date with actual route mount status
+- Push from a clean branch with descriptive commit message
 
-- Clear separation of concerns by domain (users, courses, progress, purchases).
-- Strong schema design with validations, hooks, and model methods.
-- Security middleware stack already integrated.
-- Multi-provider payment architecture.
-- Cloud-based media handling through Cloudinary.
+## Recommended next steps
 
-## Suggested Next Improvements
-
-- Add automated tests (unit + integration) using Jest/Supertest.
-- Add API documentation (Swagger/OpenAPI or Postman collection export).
-- Add refresh token strategy and secure cookie options for production (`secure`, `sameSite`).
-- Add instructor/admin analytics endpoints.
-- Add CI checks (lint, tests) and deployment docs.
+- Mount remaining implemented route modules in index.js
+- Add API docs (Swagger/OpenAPI or Postman export)
+- Add tests (Jest + Supertest)
+- Add CI for lint and tests
 
 ## Author
 

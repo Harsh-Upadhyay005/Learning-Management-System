@@ -1,4 +1,4 @@
-import { CourseProgress } from "../models/courseProgress.js";
+import { CourseProgress } from "../models/courseProgress.model.js";
 import { Course } from "../models/course.model.js";
 import { catchAsync } from "../middleware/error.middleware.js";
 import { AppError } from "../middleware/error.middleware.js";
@@ -13,7 +13,7 @@ export const getUserCourseProgress = catchAsync(async (req, res) => {
   // Get course details with lectures
   const courseDetails = await Course.findById(courseId)
     .populate("lectures")
-    .select("courseTitle courseThumbnail lectures");
+    .select("title thumbnail lectures");
 
   if (!courseDetails) {
     throw new AppError("Course not found", 404);
@@ -43,16 +43,16 @@ export const getUserCourseProgress = catchAsync(async (req, res) => {
   const completedLectures = courseProgress.lectureProgress.filter(
     (lp) => lp.isCompleted
   ).length;
-  const completionPercentage = Math.round(
-    (completedLectures / totalLectures) * 100
-  );
+  const completionPercentage = totalLectures
+    ? Math.round((completedLectures / totalLectures) * 100)
+    : 0;
 
   res.status(200).json({
     success: true,
     data: {
       courseDetails,
       progress: courseProgress.lectureProgress,
-      isCompleted: courseProgress.completed,
+      isCompleted: courseProgress.isCompleted,
       completionPercentage,
     },
   });
@@ -82,7 +82,7 @@ export const updateLectureProgress = catchAsync(async (req, res) => {
 
   // Update lecture progress
   const lectureIndex = courseProgress.lectureProgress.findIndex(
-    (lecture) => lecture.lecture === lectureId
+    (lecture) => lecture.lecture.toString() === lectureId
   );
 
   if (lectureIndex !== -1) {
@@ -96,6 +96,9 @@ export const updateLectureProgress = catchAsync(async (req, res) => {
 
   // Check if course is completed
   const course = await Course.findById(courseId);
+  if (!course) {
+    throw new AppError("Course not found", 404);
+  }
   const completedLectures = courseProgress.lectureProgress.filter(
     (lp) => lp.isCompleted
   ).length;

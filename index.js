@@ -9,6 +9,13 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import healthRouter from './routes/health.routes.js';
 import userRouter from './routes/user.route.js';
+import courseRouter from './routes/course.route.js';
+import courseProgressRouter from './routes/courseProgress.route.js';
+import purchaseCourseRouter from './routes/purchaseCourse.route.js';
+import razorpayRouter from './routes/razorpay.routes.js';
+import mediaRouter from './routes/media.route.js';
+import connectDB from './database/db.js';
+import { errorHandler } from './middleware/error.middleware.js';
 
 dotenv.config();
 
@@ -37,16 +44,14 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 //Body parser middleware
-app.use(express.json({ limit: '100kb' }));
-app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use((req, res, next) => {
+    if (req.originalUrl === '/api/v1/purchases/webhook') {
+        return next();
+    }
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(err.status || 500).json({ status: "error", message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-    });
+    return express.json({ limit: '100kb' })(req, res, next);
 });
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // cors configuration
 app.use(cors({
@@ -68,6 +73,11 @@ app.use(cors({
 
 app.use("/health", healthRouter);
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/courses", courseRouter);
+app.use("/api/v1/course-progress", courseProgressRouter);
+app.use("/api/v1/purchases", purchaseCourseRouter);
+app.use("/api/v1/razorpay", razorpayRouter);
+app.use("/api/v1/media", mediaRouter);
 
 
 
@@ -80,6 +90,14 @@ app.use((req, res) => {
     res.status(404).json({ status: "error", message: 'Route not found' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+app.use(errorHandler);
+
+const startServer = async () => {
+        await connectDB();
+
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+};
+
+startServer();

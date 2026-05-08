@@ -79,63 +79,64 @@ export const initiateStripeCheckout = catchAsync(async (req, res) => {
  * @route POST /api/v1/payments/webhook
  */
 export const handleStripeWebhook = catchAsync(async (req, res) => {
-  let event;
-
   try {
-    const payloadString = JSON.stringify(req.body, null, 2);
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    const signature = req.headers["stripe-signature"];
 
-    const header = stripe.webhooks.generateTestHeaderString({
-      payload: payloadString,
-      secret,
-    });
-
-    event = stripe.webhooks.constructEvent(payloadString, header, secret);
-  } catch (error) {
-    throw new AppError(`Webhook Error: ${error.message}`, 400);
-  }
-
-  // Handle the checkout.session.completed event
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-
-    // Find and update purchase record
-    const purchase = await CoursePurchase.findOne({
-      paymentId: session.id,
-    }).populate("course");
-
-    if (!purchase) {
-      throw new AppError("Purchase record not found", 404);
+    if (!secret) {
+      throw new AppError("Stripe webhook secret is not configured", 500);
     }
 
-    // Update purchase details
-    purchase.amount = session.amount_total
-      ? session.amount_total / 100
-      : purchase.amount;
-    purchase.status = "completed";
-    await purchase.save();
+    if (!signature) {
+      throw new AppError("Missing Stripe signature header", 400);
+    }
 
-    // Make all lectures accessible
-    if (purchase.course?.lectures?.length > 0) {
-      await Lecture.updateMany(
-        { _id: { $in: purchase.course.lectures } },
-        { $set: { isPreviewFree: true } }
+    const event = stripe.webhooks.constructEvent(req.body, signature, secret);
+
+    // Handle the checkout.session.completed event
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+
+      // Find and update purchase record
+      const purchase = await CoursePurchase.findOne({
+        paymentId: session.id,
+      }).populate("course");
+
+      if (!purchase) {
+        throw new AppError("Purchase record not found", 404);
+      }
+
+      // Update purchase details
+      purchase.amount = session.amount_total
+        ? session.amount_total / 100
+        : purchase.amount;
+      purchase.status = "completed";
+      await purchase.save();
+
+      // Make all lectures accessible
+      if (purchase.course?.lectures?.length > 0) {
+        await Lecture.updateMany(
+          { _id: { $in: purchase.course.lectures } },
+          { $set: { isPreviewFree: true } }
+        );
+      }
+
+      // Update user's enrolled courses
+      await User.findByIdAndUpdate(
+        purchase.user._id,
+        { $addToSet: { enrolledCourses: purchase.course._id } },
+        { new: true }
+      );
+
+      // Update course's enrolled students
+      await Course.findByIdAndUpdate(
+        purchase.course._id,
+        { $addToSet: { enrolledStudents: purchase.user } },
+        { new: true }
       );
     }
-
-    // Update user's enrolled courses
-    await User.findByIdAndUpdate(
-      purchase.user._id,
-      { $addToSet: { enrolledCourses: purchase.course._id } },
-      { new: true }
-    );
-
-    // Update course's enrolled students
-    await Course.findByIdAndUpdate(
-      purchase.course._id,
-      { $addToSet: { enrolledStudents: purchase.user } },
-      { new: true }
-    );
+  } catch (error) {
+    throw new AppError(`Webhook Error: ${error.message}`, 400);
   }
 
   res.status(200).json({ received: true });
